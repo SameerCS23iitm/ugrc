@@ -8,3 +8,4 @@ Output:
 Anomaly score per timestep (or per window)
 
 Other Documentation: https://docs.google.com/document/d/1Z1UwXYoS-llP6G91dinWkqhpH67cCMWbj3vkowZAu4s/edit?tab=t.tursylvez4v5
+https://chatgpt.com/c/693bba0e-5b9c-832b-846f-536e8a3c149d

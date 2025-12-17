@@ -1,0 +1,10 @@
+Goal:
+Train an anomaly detection model on normal Modbus traffic and detect deviations (attacks/faults) using anomaly scores.
+
+Input:
+Multivariate time-series (sensor + actuator values over time)
+
+Output:
+Anomaly score per timestep (or per window)
+
+Other Documentation: https://docs.google.com/document/d/1Z1UwXYoS-llP6G91dinWkqhpH67cCMWbj3vkowZAu4s/edit?tab=t.tursylvez4v5

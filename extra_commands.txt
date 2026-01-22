@@ -1,2 +1,0 @@
-to activate .venv run: source .venv/bin/activate
-to deactivate run: deactivate 

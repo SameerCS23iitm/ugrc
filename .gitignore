@@ -2,4 +2,4 @@ data/
 .venv/
 extra_commands.txt
 filelist.txt
-process.txt
+logs.txt

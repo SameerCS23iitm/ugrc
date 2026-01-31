@@ -10,3 +10,11 @@ Anomaly score per timestep (or per window)
 Other Documentation: https://docs.google.com/document/d/1Z1UwXYoS-llP6G91dinWkqhpH67cCMWbj3vkowZAu4s/edit?tab=t.tursylvez4v5
 https://chatgpt.com/c/693bba0e-5b9c-832b-846f-536e8a3c149d (original chat)
 https://chatgpt.com/g/g-p-69719e452764819182a052ac0109f00b-ugrc/c/69719e80-08c4-8322-a094-195f6ece6f7f (project specific chat)
+
+30 Jan 2026: (met Chester and Nikhilesh)
+To be done:
+-> Go through the CIC Modbus Dataset website again, understand how exactly is information stored in the dataset.
+-> Understand what the attack logs correspond to, and how to map them to the dataset.
+-> Once mapped try making time windows and then start thinking about the model.
+
+Deadline for the above: 04 Feb for first two parts, 07 Feb for the last part 

@@ -13,6 +13,7 @@ https://chatgpt.com/g/g-p-69719e452764819182a052ac0109f00b-ugrc/c/69719e80-08c4-
 
 Sources:
 https://ink.library.smu.edu.sg/cgi/viewcontent.cgi?article=5707&context=sis_research (SWaT)
+https://www.sciencedirect.com/science/article/pii/S0167404825002615 (Some work on anomaly detection in modbus)
 
 30 Jan 2026: (met Chester and Nikhilesh)
 To be done:

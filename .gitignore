@@ -1,6 +1,7 @@
 data/
 .venv/
 csvs/
+train/
 extra_commands.txt
 filelist.txt
 logs.txt

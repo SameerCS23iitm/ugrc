@@ -2,6 +2,7 @@ data/
 .venv/
 csvs/
 train/
+observations/
 extra_commands.txt
 filelist.txt
 logs.txt

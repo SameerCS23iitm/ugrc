@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#I don't think we ever run this, since the same code is run by extract_csvs.py
 echo "Extracting Modbus packets..."
 
 # -----------------------

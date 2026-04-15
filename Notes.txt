@@ -11,4 +11,8 @@
 
     Source: https://www.veridify.com/article/modbus-security-issues-and-how-to-mitigate-cyber-risks/
     Another link worth reading: https://ieeexplore.ieee.org/document/10720411
-
+    Looks promising: https://dl.acm.org/doi/pdf/10.1145/3590837.3590893 (has another dataset we could work with)
+    Seems to have a few lines in the least abt imbalances: https://arxiv.org/html/2502.13256v1
+    Others:
+    https://arxiv.org/pdf/1905.11757 (there are notes about feature extraction)
+    https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=11039366&tag=1

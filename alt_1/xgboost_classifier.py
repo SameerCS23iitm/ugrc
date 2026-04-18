@@ -2,11 +2,13 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
-from sklearn.metrics import classification_report, roc_auc_score
+import seaborn as sns
+from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix, roc_curve
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
 TRAIN_DIR = "../train/"
+OBS_DIR = "obs/xgboost/"
 
 # Load data
 cscada = pd.read_csv(TRAIN_DIR + "labeled_1s_cscada.csv")
@@ -124,3 +126,40 @@ y_pred = (y_prob > threshold).astype(int)
 print("\nResults:")
 print(classification_report(y_test, y_pred))
 print("ROC-AUC:", roc_auc_score(y_test, y_prob))
+
+
+# ================== PLOTS ==================
+
+cm = confusion_matrix(y_test, y_pred)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt='d',
+    cmap='Blues',
+    ax=ax,
+    xticklabels=['Benign', 'Attack'],
+    yticklabels=['Benign', 'Attack']
+)
+ax.set_xlabel('Predicted')
+ax.set_ylabel('Actual')
+ax.set_title('Confusion Matrix - XGBoost')
+plt.tight_layout()
+plt.savefig(OBS_DIR + 'con_matrix.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+fpr, tpr, _ = roc_curve(y_test, y_prob)
+auc = roc_auc_score(y_test, y_prob)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.plot(fpr, tpr, linewidth=2, label=f'XGBoost (AUC = {auc:.4f})')
+ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Random Classifier')
+ax.set_xlabel('False Positive Rate')
+ax.set_ylabel('True Positive Rate')
+ax.set_title('ROC Curve - XGBoost')
+ax.legend(loc='lower right')
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(OBS_DIR + 'roc.png', dpi=150, bbox_inches='tight')
+plt.show()

@@ -1,6 +1,6 @@
-# from rforest import FEATURE_COLS, feature_weights
+from rforest import FEATURE_COLS, feature_weights
 # from xgb import FEATURE_COLS, feature_weights
-from autoenc import FEATURE_COLS, feature_weights
+# from autoenc_for_weights import FEATURE_COLS, feature_weights
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 import pandas as pd

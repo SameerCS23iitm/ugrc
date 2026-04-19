@@ -1,5 +1,6 @@
 data/
 KitNET-py/
+analysis/
 .venv/
 csvs/
 train/

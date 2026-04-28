@@ -15,61 +15,45 @@ def load_all_logs(log_root):
 
 DATA_DIR = "../data/"
 TRAIN_DIR = "../train/"
-LOG_ROOT = DATA_DIR + "attack/compromised-scada/attack logs/"
-ATTACKER_IP = "185.175.0.7"
 
 FILES = {
     "1s": {
-        "benign"   : TRAIN_DIR + "1s_benign_flows.csv",
-        "cscada"   : TRAIN_DIR + "1s_cscada_flows.csv",
-        "external" : TRAIN_DIR + "1s_external_flows.csv",
+        "benign"   : TRAIN_DIR + "benign_flows_kit.csv",
+        "cscada"   : TRAIN_DIR + "cscada_flows_kit.csv",
+        "external" : TRAIN_DIR + "external_flows_kit.csv",
     }
 }
 
-TOLERANCE = {"1s": 0} 
+def label_benign(df):
+    # 1) For benign, label everything as benign by default.
+    return np.zeros(len(df), dtype=int)
 
-logs = load_all_logs(LOG_ROOT)
-logs["timestamp"] = pd.to_datetime(logs["Timestamp"], utc=True, errors="coerce")
-logs["unix_ts"] = logs["timestamp"].astype(np.int64) // 10**6
-attack_times = logs["unix_ts"].values
-print(f"Loaded {len(logs)} attack log entries")
-print(f"Time range: {logs['Timestamp'].min()} → {logs['Timestamp'].max()}")
-
-df = pd.read_csv(TRAIN_DIR + "1s_cscada_flows.csv")
-print("Flow time range:")
-print(pd.to_datetime(df["time_window"], unit='s').min())
-print(pd.to_datetime(df["time_window"], unit='s').max())
-
-print("\nAttack log time range:")
-print(logs["Timestamp"].min())
-print(logs["Timestamp"].max())
-
-def label_cscada(df, granularity):
-    tol = TOLERANCE[granularity]
-    ts = df["time_window"].values.astype(np.float64)
-   
-    sorted_atk = np.sort(attack_times)
-    
-    # For each ts, find closest attack time using binary search
-    idx = np.searchsorted(sorted_atk, ts)
-    
-    # Check neighbor to the left and right
-    left  = np.where(idx > 0, sorted_atk[np.clip(idx-1, 0, len(sorted_atk)-1)], np.inf)
-    right = np.where(idx < len(sorted_atk), sorted_atk[np.clip(idx, 0, len(sorted_atk)-1)], np.inf)
-    
-    min_dist = np.minimum(np.abs(ts - left), np.abs(ts - right))
-    return (min_dist <= tol).astype(int)
-
-def label_external(df):
-    attacker_col_prefix = ATTACKER_IP.replace(".", "_")
-    attacker_cols = [
+def _cols_for_attacker(df, attacker_ip):
+    # handle columns that encode IPs with dots or underscores and contain packet count info
+    dot_ip = attacker_ip
+    unders_ip = attacker_ip.replace(".", "_")
+    cols = [
         col for col in df.columns
-        if col.startswith(attacker_col_prefix) and "packet_count" in col
+        if ("packet_count" in col.lower() or "packets" in col.lower() or "tx" in col.lower())
+        and (col.startswith(unders_ip) or col.startswith(dot_ip) or unders_ip in col or dot_ip in col)
     ]
+    return cols
+
+def label_cscada(df, granularity=None):
+    # 2) For cscada, label windows with non-zero transactions from attacker 185.175.0.3 as attack
+    attacker_ip = "185.175.0.3"
+    attacker_cols = _cols_for_attacker(df, attacker_ip)
+    if not attacker_cols:
+        return np.zeros(len(df), dtype=int)
     return (df[attacker_cols].sum(axis=1) > 0).astype(int).values
 
-def label_benign(df):
-    return np.zeros(len(df), dtype=int)
+def label_external(df):
+    # 2) For external, label windows with non-zero transactions from attacker 185.175.0.7 as attack
+    attacker_ip = "185.175.0.7"
+    attacker_cols = _cols_for_attacker(df, attacker_ip)
+    if not attacker_cols:
+        return np.zeros(len(df), dtype=int)
+    return (df[attacker_cols].sum(axis=1) > 0).astype(int).values
 
 labelers = {
     "benign"   : label_benign,
@@ -91,7 +75,7 @@ for gran in ["1s"]:
             df["label"] = label_benign(df)
 
         total    = len(df)
-        n_attack = df["label"].sum()
+        n_attack = int(df["label"].sum())
         print(f"\n  [{scenario}]")
         print(f"  Total  : {total}")
         print(f"  Attack : {n_attack} ({100*n_attack/total:.1f}%)")
@@ -100,4 +84,3 @@ for gran in ["1s"]:
         out_path = TRAIN_DIR + f"labeled_{gran}_{scenario}.csv"
         df.to_csv(out_path, index=False)
         print(f"  Saved  → {out_path}")
-

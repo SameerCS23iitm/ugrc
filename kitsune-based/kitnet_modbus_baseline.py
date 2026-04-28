@@ -268,3 +268,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    import os
+    os.system('notify-send "Python Script" "Execution complete!"')

@@ -1,5 +1,6 @@
 import argparse
 import os
+import pickle
 import sys
 from typing import List, Tuple
 
@@ -43,6 +44,18 @@ def parse_args() -> argparse.Namespace:
         help="One or more labeled CSVs to evaluate on.",
     )
     parser.add_argument(
+        "--validation-files",
+        nargs="+",
+        default=["train/labeled_1s_cscada_val.csv", "train/labeled_1s_external_val.csv"],
+        help="One or more labeled CSVs used to tune the anomaly threshold.",
+    )
+    parser.add_argument(
+        "--test-files",
+        nargs="+",
+        default=["train/labeled_1s_cscada_test.csv", "train/labeled_1s_external_test.csv"],
+        help="One or more labeled CSVs used for final held-out evaluation.",
+    )
+    parser.add_argument(
         "--max-ae",
         type=int,
         default=16,
@@ -65,6 +78,16 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.995,
         help="Quantile from benign execution-phase scores used as anomaly threshold.",
+    )
+    parser.add_argument("--learning-rate", type=float, default=0.1)
+    parser.add_argument("--hidden-ratio",  type=float, default=0.75)
+    parser.add_argument(
+        "--mode",
+        choices=["full", "train-only", "validate-only", "test-only"],
+        default="full",
+        help="Phase to run: 'full' trains then evals; 'train-only' trains and saves detector; "
+             "'validate-only' loads detector and tunes threshold on validation; "
+             "'test-only' loads detector and threshold, evaluates on test only.",
     )
     return parser.parse_args()
 
@@ -155,23 +178,113 @@ def compute_basic_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
-def main() -> None:
-    args = parse_args()
+def print_confusion_matrix(metrics: dict, indent: str = "  ") -> None:
+    cm = np.array([[metrics["tn"], metrics["fp"]], [metrics["fn"], metrics["tp"]]], dtype=np.int64)
+    print(f"{indent}confusion matrix (rows=true [0,1], cols=pred [0,1]):")
+    print(f"{indent}        pred=0  pred=1")
+    print(f"{indent}true=0  {cm[0,0]:8d} {cm[0,1]:8d}")
+    print(f"{indent}true=1  {cm[1,0]:8d} {cm[1,1]:8d}")
 
-    default_train, default_eval = choose_default_files(args)
-    train_path = args.train_benign if args.train_benign else default_train
-    eval_paths = args.eval_files if args.eval_files else default_eval
 
-    print("Loading datasets...")
-    benign_df = read_csv(train_path).sort_values("time_window").reset_index(drop=True)
-    eval_parts = [read_csv(p) for p in eval_paths]
-    eval_df = pd.concat(eval_parts, ignore_index=True)
-    eval_df = eval_df.sort_values("time_window").reset_index(drop=True)
+def save_detector(detector: kit.KitNET, granularity: str) -> str:
+    out_dir = resolve_repo_path("observations")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"kitnet_detector_{granularity}.pkl")
+    with open(path, "wb") as f:
+        pickle.dump(detector, f)
+    print(f"Saved trained detector to: {path}")
+    return path
 
-    feature_cols = align_feature_columns(benign_df, eval_parts)
-    x_benign = prepare_matrix(benign_df, feature_cols)
-    x_eval = prepare_matrix(eval_df, feature_cols)
 
+def load_detector(granularity: str) -> kit.KitNET:
+    out_dir = resolve_repo_path("observations")
+    path = os.path.join(out_dir, f"kitnet_detector_{granularity}.pkl")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Detector not found at {path}. Run with --mode train-only first.")
+    with open(path, "rb") as f:
+        detector = pickle.load(f)
+    print(f"Loaded trained detector from: {path}")
+    return detector
+
+
+def save_threshold(threshold: float, granularity: str) -> str:
+    out_dir = resolve_repo_path("observations")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"kitnet_threshold_{granularity}.pkl")
+    with open(path, "wb") as f:
+        pickle.dump(threshold, f)
+    print(f"Saved threshold to: {path}")
+    return path
+
+
+def load_threshold(granularity: str) -> float:
+    out_dir = resolve_repo_path("observations")
+    path = os.path.join(out_dir, f"kitnet_threshold_{granularity}.pkl")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Threshold not found at {path}. Run with --mode validate-only first.")
+    with open(path, "rb") as f:
+        threshold = pickle.load(f)
+    print(f"Loaded threshold from: {path} (value: {threshold:.8f})")
+    return threshold
+
+
+def score_dataset(
+    detector: kit.KitNET,
+    df: pd.DataFrame,
+    feature_cols: List[str],
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    part_df = df.sort_values("time_window").reset_index(drop=True)
+    x_part = prepare_matrix(part_df, feature_cols)
+    y_part = part_df["label"].to_numpy(dtype=np.int64)
+    scores = np.array([detector.execute(x_part[i]) for i in range(len(x_part))], dtype=np.float64)
+    return part_df, y_part, scores
+
+
+def score_and_report_dataset(
+    detector: kit.KitNET,
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    threshold: float,
+    label: str,
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, dict]:
+    scored_df, labels, scores = score_dataset(detector, df, feature_cols)
+    preds = (scores >= threshold).astype(np.int64)
+    metrics = compute_basic_metrics(labels, preds)
+
+    print(f"\n{label} metrics")
+    print(f"  accuracy : {metrics['accuracy']:.4f}")
+    print(f"  precision: {metrics['precision']:.4f}")
+    print(f"  recall   : {metrics['recall']:.4f}")
+    print(f"  f1       : {metrics['f1']:.4f}")
+    print_confusion_matrix(metrics, indent="  ")
+
+    return scored_df, labels, scores, metrics
+
+
+def tune_threshold_from_validation(
+    val_scores: np.ndarray,
+    val_labels: np.ndarray,
+) -> Tuple[float, dict]:
+    if len(val_scores) == 0:
+        raise ValueError("Validation set is empty; cannot tune threshold.")
+
+    candidate_thresholds = np.unique(np.quantile(val_scores, np.linspace(0.01, 0.99, 99)))
+    best_threshold = float(candidate_thresholds[0])
+    best_metrics = compute_basic_metrics(val_labels, (val_scores >= best_threshold).astype(np.int64))
+
+    for threshold in candidate_thresholds[1:]:
+        preds = (val_scores >= threshold).astype(np.int64)
+        metrics = compute_basic_metrics(val_labels, preds)
+        if metrics["f1"] > best_metrics["f1"]:
+            best_threshold = float(threshold)
+            best_metrics = metrics
+
+    return best_threshold, best_metrics
+
+
+def train_detector(args: argparse.Namespace, benign_df: pd.DataFrame, eval_parts: List[pd.DataFrame], 
+                   feature_cols: List[str], x_benign: np.ndarray, x_eval: np.ndarray) -> Tuple[kit.KitNET, float]:
+    """Train detector on benign data and compute initial threshold."""
     if args.fm_grace is None or args.ad_grace is None:
         fm_default, ad_default = auto_grace_periods(len(x_benign))
         fm_grace = args.fm_grace if args.fm_grace is not None else fm_default
@@ -191,6 +304,8 @@ def main() -> None:
         max_autoencoder_size=args.max_ae,
         FM_grace_period=fm_grace,
         AD_grace_period=ad_grace,
+        learning_rate=args.learning_rate,
+        hidden_ratio=args.hidden_ratio,
     )
 
     print("Training on benign stream...")
@@ -209,6 +324,174 @@ def main() -> None:
 
     threshold = float(np.quantile(exec_scores, args.threshold_quantile))
     print(f"Threshold (q={args.threshold_quantile:.4f}): {threshold:.8f}")
+    return detector, threshold
+
+
+def main() -> None:
+    args = parse_args()
+
+    default_train, default_eval = choose_default_files(args)
+    train_path = args.train_benign if args.train_benign else default_train
+    eval_paths = args.eval_files if args.eval_files else default_eval
+
+    # --- Train-only mode: train and save detector, then exit ---
+    if args.mode == "train-only":
+        print("Loading benign dataset for training...")
+        benign_df = read_csv(train_path).sort_values("time_window").reset_index(drop=True)
+        eval_parts = [read_csv(p) for p in eval_paths]
+        feature_cols = align_feature_columns(benign_df, eval_parts)
+        x_benign = prepare_matrix(benign_df, feature_cols)
+        x_eval = prepare_matrix(pd.concat(eval_parts, ignore_index=True), feature_cols)
+        
+        detector, _ = train_detector(args, benign_df, eval_parts, feature_cols, x_benign, x_eval)
+        save_detector(detector, args.granularity)
+        print("Training complete. Detector saved.")
+        return
+
+    # --- Validate-only mode: load detector, tune threshold on validation, save threshold ---
+    if args.mode == "validate-only":
+        if not args.validation_files:
+            raise ValueError("--validate-only requires --validation-files")
+        
+        print("Loading validation dataset...")
+        val_dfs = [read_csv(p) for p in args.validation_files]
+        
+        # Need feature columns to load validation data; load any eval file to get them
+        print(f"Loading sample eval file for feature alignment...")
+        sample_eval = read_csv(eval_paths[0])
+        benign_sample = read_csv(train_path)
+        feature_cols = align_feature_columns(benign_sample, [sample_eval])
+        
+        detector = load_detector(args.granularity)
+        out_dir = resolve_repo_path("observations")
+        os.makedirs(out_dir, exist_ok=True)
+
+        thresholds = []
+        for val_df, path in zip(val_dfs, args.validation_files):
+            val_df, y_val, val_scores = score_dataset(detector, val_df, feature_cols)
+            threshold, val_metrics = tune_threshold_from_validation(val_scores, y_val)
+            thresholds.append(threshold)
+
+            print(f"Validation file: {path}")
+            print(f"  threshold: {threshold:.8f}")
+            print(f"  accuracy : {val_metrics['accuracy']:.4f}")
+            print(f"  precision: {val_metrics['precision']:.4f}")
+            print(f"  recall   : {val_metrics['recall']:.4f}")
+            print(f"  f1       : {val_metrics['f1']:.4f}")
+            print_confusion_matrix(val_metrics, indent="  ")
+
+            val_out = val_df[["time_window", "label"]].copy()
+            val_out["score"] = val_scores
+            val_out["pred"] = (val_scores >= threshold).astype(np.int64)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            val_path = os.path.join(out_dir, f"kitnet_scores_{stem}_{args.granularity}.csv")
+            val_out.to_csv(val_path, index=False)
+            print(f"  Saved validation scores to: {val_path}")
+
+        if thresholds:
+            save_threshold(float(np.median(thresholds)), args.granularity)
+        return
+
+    # --- Test-only mode: load detector and threshold, evaluate on test ---
+    if args.mode == "test-only":
+        if not args.test_files:
+            raise ValueError("--test-only requires --test-files")
+        
+        print("Loading test dataset...")
+        test_dfs = [read_csv(p) for p in args.test_files]
+        
+        # Need feature columns; load sample eval file to get them
+        print(f"Loading sample eval file for feature alignment...")
+        sample_eval = read_csv(eval_paths[0])
+        benign_sample = read_csv(train_path)
+        feature_cols = align_feature_columns(benign_sample, [sample_eval])
+        
+        detector = load_detector(args.granularity)
+        threshold = load_threshold(args.granularity)
+        
+        out_dir = resolve_repo_path("observations")
+        os.makedirs(out_dir, exist_ok=True)
+
+        for test_df, path in zip(test_dfs, args.test_files):
+            test_df, y_test, test_scores, test_metrics = score_and_report_dataset(
+                detector,
+                test_df,
+                feature_cols,
+                threshold,
+                f"Test file: {path}",
+            )
+
+            test_out = test_df[["time_window", "label"]].copy()
+            test_out["score"] = test_scores
+            test_out["pred"] = (test_scores >= threshold).astype(np.int64)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            test_path = os.path.join(out_dir, f"kitnet_scores_{stem}_{args.granularity}.csv")
+            test_out.to_csv(test_path, index=False)
+            print(f"  Saved test scores to: {test_path}")
+        return
+
+    # --- Full mode (default): train, then validate/test in one go ---
+    print("Loading datasets...")
+    benign_df = read_csv(train_path).sort_values("time_window").reset_index(drop=True)
+    eval_parts = [read_csv(p) for p in eval_paths]
+    eval_df = pd.concat(eval_parts, ignore_index=True)
+    eval_df = eval_df.sort_values("time_window").reset_index(drop=True)
+
+    feature_cols = align_feature_columns(benign_df, eval_parts)
+    x_benign = prepare_matrix(benign_df, feature_cols)
+    x_eval = prepare_matrix(eval_df, feature_cols)
+
+    detector, threshold = train_detector(args, benign_df, eval_parts, feature_cols, x_benign, x_eval)
+
+    if args.validation_files and args.test_files:
+        print("\nValidation/test split detected; tuning threshold on validation set.")
+
+        out_dir = resolve_repo_path("observations")
+        os.makedirs(out_dir, exist_ok=True)
+
+        thresholds = []
+        for val_df, path in zip([read_csv(p) for p in args.validation_files], args.validation_files):
+            val_df, y_val, val_scores = score_dataset(detector, val_df, feature_cols)
+            threshold, val_metrics = tune_threshold_from_validation(val_scores, y_val)
+            thresholds.append(threshold)
+
+            print(f"Validation file: {path}")
+            print(f"  threshold: {threshold:.8f}")
+            print(f"  accuracy : {val_metrics['accuracy']:.4f}")
+            print(f"  precision: {val_metrics['precision']:.4f}")
+            print(f"  recall   : {val_metrics['recall']:.4f}")
+            print(f"  f1       : {val_metrics['f1']:.4f}")
+            print_confusion_matrix(val_metrics, indent="  ")
+
+            val_out = val_df[["time_window", "label"]].copy()
+            val_out["score"] = val_scores
+            val_out["pred"] = (val_scores >= threshold).astype(np.int64)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            val_path = os.path.join(out_dir, f"kitnet_scores_{stem}_{args.granularity}.csv")
+            val_out.to_csv(val_path, index=False)
+            print(f"  Saved validation scores to: {val_path}")
+
+        if thresholds:
+            threshold = float(np.median(thresholds))
+            save_threshold(threshold, args.granularity)
+
+        for test_df, path in zip([read_csv(p) for p in args.test_files], args.test_files):
+            test_df, y_test, test_scores, test_metrics = score_and_report_dataset(
+                detector,
+                test_df,
+                feature_cols,
+                threshold,
+                f"Test file: {path}",
+            )
+
+            test_out = test_df[["time_window", "label"]].copy()
+            test_out["score"] = test_scores
+            test_out["pred"] = (test_scores >= threshold).astype(np.int64)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            test_path = os.path.join(out_dir, f"kitnet_scores_{stem}_{args.granularity}.csv")
+            test_out.to_csv(test_path, index=False)
+            print(f"  Saved test scores to: {test_path}")
+        return
 
     print("Scoring evaluation streams...")
     eval_outputs = []
@@ -228,12 +511,7 @@ def main() -> None:
         print(f"  precision: {metrics['precision']:.4f}")
         print(f"  recall   : {metrics['recall']:.4f}")
         print(f"  f1       : {metrics['f1']:.4f}")
-        confusion_matrix = np.array(
-            [[metrics["tn"], metrics["fp"]], [metrics["fn"], metrics["tp"]]],
-            dtype=np.int64,
-        )
-        print("  confusion matrix (rows=true [0,1], cols=pred [0,1]):")
-        print(confusion_matrix)
+        print_confusion_matrix(metrics, indent="  ")
 
         per_file_out = part_df[["time_window", "label"]].copy()
         per_file_out["score"] = part_scores
@@ -249,6 +527,7 @@ def main() -> None:
     print(f"  precision: {combined_metrics['precision']:.4f}")
     print(f"  recall   : {combined_metrics['recall']:.4f}")
     print(f"  f1       : {combined_metrics['f1']:.4f}")
+    print_confusion_matrix(combined_metrics, indent="  ")
 
     out = eval_df[["time_window", "label"]].copy()
     out["score"] = eval_scores

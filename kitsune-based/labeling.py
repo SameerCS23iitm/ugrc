@@ -26,7 +26,7 @@ FILES = {
     }
 }
 
-TOLERANCE = {"1s": 1} 
+TOLERANCE = {"1s": 10} 
 
 logs = load_all_logs(LOG_ROOT)
 logs["timestamp"] = pd.to_datetime(logs["Timestamp"], utc=True, errors="coerce")

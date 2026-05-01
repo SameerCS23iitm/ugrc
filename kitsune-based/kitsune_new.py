@@ -6,6 +6,8 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -96,6 +98,18 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.995,
         help="Quantile from benign execution-phase scores used as anomaly threshold.",
+    )
+    parser.add_argument(
+        "--validation-objective",
+        choices=["f1", "f1_min_acc", "quantile"],
+        default="f1_min_acc",
+        help="How to choose the persisted validation threshold: maximize F1, maximize F1 with an accuracy floor, or use benign-score quantile.",
+    )
+    parser.add_argument(
+        "--min-validation-accuracy",
+        type=float,
+        default=0.70,
+        help="Minimum validation accuracy required when selecting the threshold with the F1+accuracy objective.",
     )
     return parser.parse_args()
 
@@ -222,6 +236,88 @@ def compute_basic_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
+def find_best_threshold_for_f1(y_true: np.ndarray, scores: np.ndarray) -> Tuple[float, dict]:
+    """Return the threshold that maximizes F1 on labeled validation data."""
+    if len(scores) == 0:
+        raise ValueError("Cannot tune threshold on an empty score array.")
+
+    candidate_thresholds = np.unique(scores)
+    if candidate_thresholds.size == 1:
+        candidate_thresholds = np.array(
+            [candidate_thresholds[0] - 1e-12, candidate_thresholds[0], candidate_thresholds[0] + 1e-12],
+            dtype=np.float64,
+        )
+    else:
+        eps = 1e-12
+        candidate_thresholds = np.concatenate(
+            ([candidate_thresholds[0] - eps], candidate_thresholds, [candidate_thresholds[-1] + eps])
+        )
+
+    best_threshold = float(candidate_thresholds[0])
+    best_metrics = compute_basic_metrics(y_true, scores >= best_threshold)
+
+    for threshold in candidate_thresholds[1:]:
+        metrics = compute_basic_metrics(y_true, scores >= threshold)
+        if metrics["f1"] > best_metrics["f1"]:
+            best_threshold = float(threshold)
+            best_metrics = metrics
+        elif metrics["f1"] == best_metrics["f1"]:
+            if metrics["recall"] > best_metrics["recall"]:
+                best_threshold = float(threshold)
+                best_metrics = metrics
+            elif metrics["recall"] == best_metrics["recall"] and metrics["precision"] > best_metrics["precision"]:
+                best_threshold = float(threshold)
+                best_metrics = metrics
+
+    return best_threshold, best_metrics
+
+
+def find_best_threshold_with_accuracy_floor(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    min_accuracy: float,
+) -> Tuple[float, dict, bool]:
+    """Return the F1-best threshold that satisfies an accuracy floor when possible."""
+    threshold, metrics = find_best_threshold_for_f1(y_true, scores)
+    best_threshold = threshold
+    best_metrics = metrics
+
+    candidate_thresholds = np.unique(scores)
+    if candidate_thresholds.size == 1:
+        candidate_thresholds = np.array(
+            [candidate_thresholds[0] - 1e-12, candidate_thresholds[0], candidate_thresholds[0] + 1e-12],
+            dtype=np.float64,
+        )
+    else:
+        eps = 1e-12
+        candidate_thresholds = np.concatenate(
+            ([candidate_thresholds[0] - eps], candidate_thresholds, [candidate_thresholds[-1] + eps])
+        )
+
+    found_feasible = False
+    for candidate in candidate_thresholds:
+        candidate_metrics = compute_basic_metrics(y_true, scores >= candidate)
+        if candidate_metrics["accuracy"] < min_accuracy:
+            continue
+        if not found_feasible:
+            best_threshold = float(candidate)
+            best_metrics = candidate_metrics
+            found_feasible = True
+            continue
+        if candidate_metrics["f1"] > best_metrics["f1"]:
+            best_threshold = float(candidate)
+            best_metrics = candidate_metrics
+        elif candidate_metrics["f1"] == best_metrics["f1"]:
+            if candidate_metrics["accuracy"] > best_metrics["accuracy"]:
+                best_threshold = float(candidate)
+                best_metrics = candidate_metrics
+            elif candidate_metrics["accuracy"] == best_metrics["accuracy"] and candidate_metrics["recall"] > best_metrics["recall"]:
+                best_threshold = float(candidate)
+                best_metrics = candidate_metrics
+
+    return best_threshold, best_metrics, found_feasible
+
+
 def _print_metrics(m: dict) -> None:
     print(f"  accuracy : {m['accuracy']:.4f}")
     print(f"  precision: {m['precision']:.4f}")
@@ -230,6 +326,77 @@ def _print_metrics(m: dict) -> None:
     cm = np.array([[m["tn"], m["fp"]], [m["fn"], m["tp"]]], dtype=np.int64)
     print("  confusion matrix (rows=true [0,1], cols=pred [0,1]):")
     print(cm)
+
+
+def _save_confusion_matrix_plot(
+    m: dict,
+    tag: str,
+    scenario: str,
+    out_dir: str = None,
+) -> str:
+    """Generate and save a colored confusion matrix heatmap as PNG.
+
+    PNGs default to the kitsune-based/obs directory.
+    """
+    if out_dir is None:
+        out_dir = resolve_repo_path("kitsune-based/obs")
+    os.makedirs(out_dir, exist_ok=True)
+
+    cm = np.array([[m["tn"], m["fp"]], [m["fn"], m["tp"]]], dtype=np.int64)
+
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
+
+    # Create heatmap with colors
+    im = ax.imshow(cm, cmap="Blues", aspect="auto")
+
+    # Set ticks and labels
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(["Pred: Benign", "Pred: Attack"])
+    ax.set_yticklabels(["True: Benign", "True: Attack"])
+
+    ax.set_xlabel("Predicted Label", fontsize=12, fontweight="bold")
+    ax.set_ylabel("True Label", fontsize=12, fontweight="bold")
+    ax.set_title(f"Confusion Matrix - {tag} ({scenario})", fontsize=14, fontweight="bold")
+
+    # Add text annotations
+    for i in range(2):
+        for j in range(2):
+            text = ax.text(
+                j,
+                i,
+                cm[i, j],
+                ha="center",
+                va="center",
+                color="white" if cm[i, j] > cm.max() / 2 else "black",
+                fontsize=14,
+                fontweight="bold",
+            )
+
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Count", fontsize=11, fontweight="bold")
+
+    # Add metrics as text
+    metrics_text = f"Accuracy: {m['accuracy']:.4f}\nPrecision: {m['precision']:.4f}\nRecall: {m['recall']:.4f}\nF1: {m['f1']:.4f}"
+    fig.text(
+        0.99,
+        0.01,
+        metrics_text,
+        ha="right",
+        va="bottom",
+        fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+    )
+
+    plt.tight_layout()
+
+    out_path = os.path.join(out_dir, f"new/cm_{tag.lower()}_{scenario}.png")
+    plt.savefig(out_path, dpi=100, bbox_inches="tight")
+    plt.close()
+
+    return out_path
+
 
 
 def _score_files(
@@ -241,6 +408,7 @@ def _score_files(
     scenario: str,
     save_outputs: bool = False,
     out_dir: str = "",
+    png_out_dir: str = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Score one or more CSV files, print per-file metrics, optionally save CSVs.
 
@@ -274,6 +442,9 @@ def _score_files(
             out_path = os.path.join(out_dir, f"kitnet_scores_{stem}_{scenario}.csv")
             out.to_csv(out_path, index=False)
             print(f"Saved: {out_path}")
+            # Save confusion matrix plot into png_out_dir (defaults to kitsune-based/obs)
+            cm_plot_path = _save_confusion_matrix_plot(metrics, tag, scenario, png_out_dir)
+            print(f"Saved: {cm_plot_path}")
 
     return np.concatenate(all_scores), np.concatenate(all_labels)
 
@@ -339,6 +510,7 @@ def run_train(args: argparse.Namespace) -> None:
 
 
 def run_validate(args: argparse.Namespace) -> None:
+    # Load pre-trained detector and retune threshold on labeled validation data.
     detector, feature_cols, threshold = load_model(args.model_dir)
 
     print(f"[scenario={args.scenario}] Scoring validation files...")
@@ -351,35 +523,74 @@ def run_validate(args: argparse.Namespace) -> None:
         scenario=args.scenario,
     )
 
-    print("\nCombined validation metrics")
+    print("\nCombined validation metrics with pre-trained threshold")
     y_pred = (all_scores >= threshold).astype(np.int64)
-    _print_metrics(compute_basic_metrics(all_labels, y_pred))
+    pretrained_metrics = compute_basic_metrics(all_labels, y_pred)
+    _print_metrics(pretrained_metrics)
+    out_dir = resolve_repo_path("./")
+    os.makedirs(out_dir, exist_ok=True)
+    cm_plot_path = _save_confusion_matrix_plot(pretrained_metrics, "Validation-Pretrained", args.scenario, out_dir)
+    print(f"Saved: {cm_plot_path}")
 
-    # Re-tune threshold on val-benign scores and persist so test picks it up
-    benign_val_scores = all_scores[all_labels == 0]
-    if len(benign_val_scores) > 0:
-        tuned = float(np.quantile(benign_val_scores, args.threshold_quantile))
-        print(
-            f"\nRe-tuned threshold on val-benign "
-            f"(q={args.threshold_quantile:.4f}): {tuned:.8f}"
+    # Fine-tune the threshold based on labeled validation data.
+    if args.validation_objective == "f1":
+        tuned, tuned_metrics = find_best_threshold_for_f1(all_labels, all_scores)
+        print(f"\nBest validation threshold for F1: {tuned:.8f}")
+        _print_metrics(tuned_metrics)
+        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, out_dir)
+        print(f"Saved: {cm_plot_path}")
+        save_model(detector, feature_cols, tuned, args.model_dir)
+    elif args.validation_objective == "f1_min_acc":
+        tuned, tuned_metrics, feasible = find_best_threshold_with_accuracy_floor(
+            all_labels,
+            all_scores,
+            args.min_validation_accuracy,
         )
-        print("Combined validation metrics with re-tuned threshold")
-        y_pred_tuned = (all_scores >= tuned).astype(np.int64)
-        _print_metrics(compute_basic_metrics(all_labels, y_pred_tuned))
+        if feasible:
+            print(
+                f"\nBest validation threshold for F1 with accuracy >= {args.min_validation_accuracy:.2f}: {tuned:.8f}"
+            )
+        else:
+            print(
+                f"\nNo threshold reached accuracy >= {args.min_validation_accuracy:.2f}; falling back to pure F1 optimum."
+            )
+        _print_metrics(tuned_metrics)
+        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, out_dir)
+        print(f"Saved: {cm_plot_path}")
         save_model(detector, feature_cols, tuned, args.model_dir)
     else:
-        print(
-            "No benign samples found in validation set — "
-            "keeping original threshold."
-        )
+        benign_val_scores = all_scores[all_labels == 0]
+        if len(benign_val_scores) > 0:
+            tuned = float(np.quantile(benign_val_scores, args.threshold_quantile))
+            print(
+                f"\nRe-tuned threshold on val-benign "
+                f"(q={args.threshold_quantile:.4f}): {tuned:.8f}"
+            )
+            print("Combined validation metrics with re-tuned threshold")
+            y_pred_tuned = (all_scores >= tuned).astype(np.int64)
+            tuned_metrics_quantile = compute_basic_metrics(all_labels, y_pred_tuned)
+            _print_metrics(tuned_metrics_quantile)
+            cm_plot_path = _save_confusion_matrix_plot(tuned_metrics_quantile, "Validation-Tuned", args.scenario, png_out_dir)
+            print(f"Saved: {cm_plot_path}")
+            save_model(detector, feature_cols, tuned, args.model_dir)
+        else:
+            print(
+                "No benign samples found in validation set — "
+                "keeping original threshold."
+            )
 
 
 def run_test(args: argparse.Namespace) -> None:
+    # Test mode always uses the pre-trained model as-is; no re-training or re-tuning.
     detector, feature_cols, threshold = load_model(args.model_dir)
     print(f"[scenario={args.scenario}] Using threshold: {threshold:.8f}")
 
-    out_dir = resolve_repo_path("observations")
-    os.makedirs(out_dir, exist_ok=True)
+    # CSV outputs for kitnet scores go to kitsune-based/observations
+    csv_out_dir = resolve_repo_path("kitsune-based/observations")
+    os.makedirs(csv_out_dir, exist_ok=True)
+    # PNG outputs go to kitsune-based/obs
+    png_out_dir = resolve_repo_path("kitsune-based/obs")
+    os.makedirs(png_out_dir, exist_ok=True)
 
     print("Scoring test files...")
     all_scores, all_labels = _score_files(
@@ -390,19 +601,19 @@ def run_test(args: argparse.Namespace) -> None:
         tag="Test",
         scenario=args.scenario,
         save_outputs=True,
-        out_dir=out_dir,
+        out_dir=csv_out_dir,
+        png_out_dir=png_out_dir,
     )
 
     print("\nCombined test metrics")
     y_pred = (all_scores >= threshold).astype(np.int64)
-    _print_metrics(compute_basic_metrics(all_labels, y_pred))
+    test_metrics = compute_basic_metrics(all_labels, y_pred)
+    _print_metrics(test_metrics)
+    cm_plot_path = _save_confusion_matrix_plot(test_metrics, "Test", args.scenario, png_out_dir)
+    print(f"Saved: {cm_plot_path}")
 
-    combined_path = os.path.join(
-        out_dir, f"kitnet_scores_combined_{args.scenario}.csv"
-    )
-    pd.DataFrame(
-        {"label": all_labels, "score": all_scores, "pred": y_pred}
-    ).to_csv(combined_path, index=False)
+    combined_path = os.path.join(csv_out_dir, f"kitnet_scores_combined_{args.scenario}.csv")
+    pd.DataFrame({"label": all_labels, "score": all_scores, "pred": y_pred}).to_csv(combined_path, index=False)
     print(f"Saved combined scores to: {combined_path}")
 
 

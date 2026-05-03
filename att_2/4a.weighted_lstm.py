@@ -1,6 +1,7 @@
-# from rforest import FEATURE_COLS, feature_weights
-from xgb import FEATURE_COLS, feature_weights
+from rforest import FEATURE_COLS, feature_weights
+# from xgb import FEATURE_COLS, feature_weights
 # from autoenc_for_weights import FEATURE_COLS, feature_weights
+import os
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 import pandas as pd
@@ -9,7 +10,7 @@ import numpy as np
 SEQ_LEN = 20
 TRAIN_DIR = "../train/"
 DATA_DIR = "../data/"
-OBS_DIR = "obs/xgblstm/"
+OBS_DIR = "obs/rforest/"
 
 # Keep average feature scale near 1.0 so weighted inputs do not collapse in magnitude.
 FEATURE_WEIGHT_VEC = np.array([feature_weights[col] for col in FEATURE_COLS], dtype=np.float32)
@@ -254,3 +255,4 @@ plt.show()
 
 model.save('../train/lstm_baseline_1s.keras')
 print("✓ Model saved to train/lstm_baseline_1s.keras")
+os.system('notify-send "Python Script" "Execution complete!"')

@@ -7,13 +7,11 @@ import pandas as pd
 
 TRAIN_DIR = "../train/"
 
+print("Loading data...")
 cscada = pd.read_csv(TRAIN_DIR + "labeled_1s_cscada.csv")
-
-FEATURE_COLS = [
-    "packet_count", "total_bytes", "mean_packet_size", "std_packet_size",
-    "iat_mean", "iat_std", "min_iat", "max_iat",
-    "unique_func_codes", "read_count", "write_count", "exception_count"
-]
+print(f"Data loaded: {len(cscada)} rows")
+cols = cscada.columns.tolist()
+FEATURE_COLS = [col for col in cols if col not in ["label", "time_window"]]
 
 # X = features, y = labels
 X = cscada[FEATURE_COLS]
@@ -32,6 +30,6 @@ weights = weights / np.sum(weights)
 # Map feature -> weight
 feature_weights = dict(zip(FEATURE_COLS, weights))
 
-for key, value in feature_weights.items():
-    print(f"{key}: {value}")
+# for key, value in feature_weights.items():
+#     print(f"{key}: {value}")
 

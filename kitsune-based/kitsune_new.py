@@ -527,9 +527,13 @@ def run_validate(args: argparse.Namespace) -> None:
     y_pred = (all_scores >= threshold).astype(np.int64)
     pretrained_metrics = compute_basic_metrics(all_labels, y_pred)
     _print_metrics(pretrained_metrics)
-    out_dir = resolve_repo_path("./")
-    os.makedirs(out_dir, exist_ok=True)
-    cm_plot_path = _save_confusion_matrix_plot(pretrained_metrics, "Validation-Pretrained", args.scenario, out_dir)
+    # CSV outputs for kitnet scores go to kitsune-based/observations
+    csv_out_dir = resolve_repo_path("kitsune-based/observations")
+    os.makedirs(csv_out_dir, exist_ok=True)
+    # PNG outputs go to kitsune-based/obs
+    png_out_dir = resolve_repo_path("kitsune-based/obs")
+    os.makedirs(png_out_dir, exist_ok=True)
+    cm_plot_path = _save_confusion_matrix_plot(pretrained_metrics, "Validation-Pretrained", args.scenario, png_out_dir)
     print(f"Saved: {cm_plot_path}")
 
     # Fine-tune the threshold based on labeled validation data.
@@ -537,7 +541,7 @@ def run_validate(args: argparse.Namespace) -> None:
         tuned, tuned_metrics = find_best_threshold_for_f1(all_labels, all_scores)
         print(f"\nBest validation threshold for F1: {tuned:.8f}")
         _print_metrics(tuned_metrics)
-        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, out_dir)
+        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, png_out_dir)
         print(f"Saved: {cm_plot_path}")
         save_model(detector, feature_cols, tuned, args.model_dir)
     elif args.validation_objective == "f1_min_acc":
@@ -555,7 +559,7 @@ def run_validate(args: argparse.Namespace) -> None:
                 f"\nNo threshold reached accuracy >= {args.min_validation_accuracy:.2f}; falling back to pure F1 optimum."
             )
         _print_metrics(tuned_metrics)
-        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, out_dir)
+        cm_plot_path = _save_confusion_matrix_plot(tuned_metrics, "Validation-Tuned", args.scenario, png_out_dir)
         print(f"Saved: {cm_plot_path}")
         save_model(detector, feature_cols, tuned, args.model_dir)
     else:
@@ -635,6 +639,13 @@ def main() -> None:
     else:
         args.model_dir = resolve_repo_path(args.model_dir)
 
+    # For validate/test we require a previously-trained model to exist; fail fast
+    if args.mode in ("validate", "test"):
+        det_path = os.path.join(args.model_dir, "detector.pkl")
+        if not os.path.exists(det_path):
+            raise SystemExit(
+                f"No trained model found at '{args.model_dir}'. Run with --mode train first or pass --model-dir pointing to a trained model."
+            )
     dispatch = {
         "train":    run_train,
         "validate": run_validate,

@@ -6,16 +6,18 @@ import numpy as np
 import pandas as pd
 
 TRAIN_DIR = "../train/"
+CSCADA = "labeled_1s_cscada.csv"
+EXTERNAL = "labeled_1s_external.csv"
 
 print("Loading data...")
-cscada = pd.read_csv(TRAIN_DIR + "labeled_1s_cscada.csv")
-print(f"Data loaded: {len(cscada)} rows")
-cols = cscada.columns.tolist()
+data = pd.read_csv(TRAIN_DIR + EXTERNAL)  # or CSCADA, depending on which you want to analyze
+print(f"Data loaded: {len(data)} rows")
+cols = data.columns.tolist()
 FEATURE_COLS = [col for col in cols if col not in ["label", "time_window"]]
 
 # X = features, y = labels
-X = cscada[FEATURE_COLS]
-y = cscada["label"]   # attack / benign labels
+X = data[FEATURE_COLS]
+y = data["label"]   # attack / benign labels
 
 # Train Random Forest
 rf = RandomForestClassifier(n_estimators=100, random_state=42)

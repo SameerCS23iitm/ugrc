@@ -7,19 +7,19 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 TRAIN_DIR = "../train/"
+CSCADA = "labeled_1s_cscada.csv"
+EXTERNAL = "labeled_1s_external.csv"
 
 # Load data
-cscada = pd.read_csv(TRAIN_DIR + "labeled_1s_cscada.csv")
+data = pd.read_csv(TRAIN_DIR + EXTERNAL)  # or CSCADA, depending on which you want to analyze
 
-FEATURE_COLS = [
-    "packet_count", "total_bytes", "mean_packet_size", "std_packet_size",
-    "iat_mean", "iat_std", "min_iat", "max_iat",
-    "unique_func_codes", "read_count", "write_count", "exception_count"
-]
+cols = data.columns.tolist()
+FEATURE_COLS = [col for col in cols if col not in ["label", "time_window"]]
+
 
 # Split benign and attack
-benign_df = cscada[cscada["label"] == 0].copy()
-attack_df = cscada[cscada["label"] == 1].copy()
+benign_df = data[data["label"] == 0].copy()
+attack_df = data[data["label"] == 1].copy()
 
 print(f"Benign samples: {len(benign_df)}")
 print(f"Attack samples: {len(attack_df)}")
@@ -63,7 +63,6 @@ print(f"Using device: {device}")
 
 # Convert to tensors
 X_benign_tensor = torch.FloatTensor(X_benign).to(device)
-
 # Create dataloader
 batch_size = 32
 dataset = TensorDataset(X_benign_tensor)

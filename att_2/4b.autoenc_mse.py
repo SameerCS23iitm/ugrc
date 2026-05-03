@@ -12,7 +12,7 @@ from sklearn.metrics import classification_report, confusion_matrix, roc_auc_sco
 
 
 TRAIN_DIR = "../train/"
-OBS_DIR = "obs/autoencoder/"
+OBS_DIR = "obs/autoencoder_mse/"
 os.makedirs(OBS_DIR, exist_ok=True)
 
 
@@ -202,6 +202,8 @@ print(classification_report(y_true, y_pred, target_names=['Benign', 'Attack']))
 
 auc = roc_auc_score(y_true, mse_all)
 print(f"ROC-AUC Score: {auc:.4f}")
+os.system('notify-send "Python Script" "Execution complete!"')
+
 
 precision, recall, _ = precision_recall_curve(y_true, mse_all)
 fig, ax = plt.subplots(figsize=(8, 6))

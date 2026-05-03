@@ -1018,10 +1018,10 @@ def ping():
 
 
 def wrapper(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug=False, time_offset_seconds=0):
-    # plot_packet_counts_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
-    # plot_payload_bytes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
-    plot_write_function_codes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
-    plot_read_function_codes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
+    plot_packet_counts_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
+    plot_payload_bytes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
+    # plot_write_function_codes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
+    # plot_read_function_codes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
     # plot_exception_codes_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
     # plot_inter_arrival_times_per_second(input_csv, attacker_ip, victim_ip, timestamp, attack_name, time_range_seconds, debug, time_offset_seconds)
     ping()

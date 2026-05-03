@@ -3,17 +3,20 @@ import numpy as np
 import pandas as pd
 
 TRAIN_DIR = "../train/"
+CSCADA = "labeled_1s_cscada.csv"
+EXTERNAL = "labeled_1s_external.csv"
 
-cscada = pd.read_csv(TRAIN_DIR + "labeled_1s_cscada.csv")
+data = pd.read_csv(TRAIN_DIR + EXTERNAL)  # or CSCADA, depending on which you want to analyze
 
-cols = cscada.columns.tolist()
+cols = data.columns.tolist()
 FEATURE_COLS = [col for col in cols if col not in ["label", "time_window"]]
 
 
 # Features and labels
 # X = features, y = labels
-X = cscada[FEATURE_COLS]
-y = cscada["label"]   # assume 1 = attack, 0 = benign
+X = data[FEATURE_COLS]
+y = data["label"]   # assume 1 = attack, 0 = benign
+print(f"Attack count: {y.sum()}, Benign count: {len(y) - y.sum()}")
 
 # Handle imbalance
 scale_pos_weight = (len(y) - y.sum()) / y.sum()

@@ -1,6 +1,6 @@
-from rforest import FEATURE_COLS, feature_weights
+# from rforest import FEATURE_COLS, feature_weights
 # from xgb import FEATURE_COLS, feature_weights
-# from autoenc_for_weights import FEATURE_COLS, feature_weights
+from autoenc_for_weights import FEATURE_COLS, feature_weights
 
 import os
 import gc
@@ -29,7 +29,7 @@ SEQ_LEN    = 20
 BATCH_SIZE = 16          # halved from 32 to ease memory pressure
 TRAIN_DIR  = "../train/"
 DATA_DIR   = "../data/"
-OBS_DIR    = "ext/rforest/"
+OBS_DIR    = "obs/autoencoder/"
 
 FEATURE_WEIGHT_VEC = np.array(
     [feature_weights[col] for col in FEATURE_COLS], dtype=np.float32
@@ -51,8 +51,8 @@ print(f"GPU Available: {tf.config.list_physical_devices('GPU')}")
 #  QUICK DATASET STATS (no sequences yet)
 # ─────────────────────────────────────────────
 gran = "1s"
-df = pd.read_csv(TRAIN_DIR + f"labeled_{gran}_external.csv")
-print(f"\n{gran} external:")
+df = pd.read_csv(TRAIN_DIR + f"labeled_{gran}_cscada.csv")
+print(f"\n{gran} cscada:")
 print(f"  Total : {len(df)}")
 print(f"  Attack: {df['label'].sum()} ({100*df['label'].sum()/len(df):.1f}%)")
 

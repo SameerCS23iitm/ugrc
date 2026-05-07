@@ -1,17 +1,16 @@
-# UGRC Modbus Anomaly Detection Project
+# ML-based Anomaly Detection in Cyber-Physical Systems
 
 ## Project Overview
 
-This project implements **machine learning-based anomaly detection** for substation networks using the **CIC Modbus Dataset 2023**. The goal is to detect intrusion attempts and anomalies in Industrial Control System (ICS) network traffic using the Modbus protocol.
+This project implements **machine learning-based anomaly detection** for substation networks using the **CIC Modbus Dataset 2023**(https://www.unb.ca/cic/datasets/modbus-2023.html). The goal is to detect intrusion attempts and anomalies in Industrial Control System (ICS) network traffic using the Modbus protocol.
 
 ### Key Objectives
+- Extract features from raw PCAP network captures and create labeled datasets
 - Detect malicious network traffic in substation environments
 - Compare multiple anomaly detection approaches:
-  - **KitNET**: Unsupervised ensemble of autoencoders for online anomaly detection
   - **LSTM-based models**: Including standard classification, autoencoders, and weighted variants
-  - **Tree-based models**: XGBoost and Random Forest classifiers
+  - **KitNET-based model**: Unsupervised ensemble of autoencoders for online anomaly detection
 - Evaluate performance across different attack scenarios (SCADA compromises, external attacks)
-- Extract features from raw PCAP network captures and create labeled datasets
 
 ---
 
@@ -22,7 +21,7 @@ The dataset contains network traffic captures from a **simulated substation netw
 
 #### Dataset Structure
 - **Benign Traffic**: Normal Modbus communication from legitimate devices
-- **Attack Traffic**: 9 different types of attacks including:
+- **Attack Traffic**: Benign traffic along with different types of attacks including:
   - Reconnaissance
   - Query flooding
   - Payload loading
@@ -34,7 +33,7 @@ The dataset contains network traffic captures from a **simulated substation netw
   - Baseline replay
 
 #### Attack Scenarios
-1. **Compromised SCADA/HMI**: Attacks originating from internal devices
+1. **Compromised SCADA**: Attacks originating from internal devices
 2. **External Network**: Attacks from outside the substation
 3. **Compromised IED**: Attacks from industrial electronic devices
 
@@ -52,59 +51,52 @@ Attacker (185.175.0.7)
 
 ## Project Structure
 
+The files below are the ones currently visible in Git. Generated data and large working directories are ignored by `.gitignore`, so they do not appear in the repository tree.
+
 ```
 ugrc/
-├── README.md                      # Original project info
-├── requirements.txt               # Python dependencies
-├── data/                          # Raw PCAP files and logs
-│   ├── benign/                    # Benign network captures
-│   ├── attack/                    # Attack scenarios
-│   │   ├── compromised-scada/
-│   │   ├── compromised-ied/
-│   │   └── external/
-│   └── combined/                  # Merged captures
-│
-├── train/                         # Processed & labeled datasets
-│   ├── *.csv                      # Feature-extracted data
-│   ├── *.npy                      # Numpy arrays for models
-│   └── *.keras                    # Pre-trained models
-│
-├── analysis/                      # Data analysis & extraction
-│   ├── 1.extract_csvs.ipynb       # Extract fields from PCAP → CSV
-│   ├── 1.modbus_specific.ipynb    # Modbus protocol analysis
-│   ├── common.ipynb               # Common utilities
-│   ├── recon.ipynb                # Reconnaissance analysis
-│   ├── wrapper.py                 # Helper functions
-│   └── obs/                       # Observations/results
-│
-├── kitsune-based/                 # KitNET anomaly detector
-│   ├── kitsune_new.py             # Main KitNET implementation
-│   ├── kitnet_modbus_baseline.py  # Baseline evaluation
-│   ├── extract.py                 # PCAP extraction for KitNET
-│   ├── windowing.py               # Create time windows
-│   ├── run_kitnet.sh              # Execution script
-│   └── obs/                       # Results & observations
-│
-├── lstm-based/                    # LSTM-based models
-│   ├── 3.labeling.py              # Label datasets with attack ground truth
-│   ├── 4a.weighted_lstm.py        # Weighted LSTM classifier
-│   ├── 4b.autoenc_mse.py          # MSE-based autoencoder
-│   ├── 4c.lstm_autoencoder.py     # Sequence autoencoder
-│   ├── 4d.baseline_lstm.py        # Basic LSTM baseline
-│   ├── rforest.py                 # Random Forest classifier
-│   ├── xgb.py                     # XGBoost classifier
-│   ├── xgboost_classifier.py      # XGBoost alternative
-│   └── obs/                       # Results & observations
-│
-├── KitNET-py/                     # KitNET library
-│   ├── KitNET.py                  # Core anomaly detection
-│   ├── corClust.py                # Correlation clustering
-│   ├── dA.py                       # Denoising autoencoders
-│   ├── utils.py                   # Utilities
-│   └── README.md                  # KitNET documentation
-│
-└── observations/                  # Aggregated experimental results
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── analysis/
+│   ├── 1.extract_csvs.ipynb
+│   ├── 1.modbus_specific.ipynb
+│   ├── baseline_replay.ipynb
+│   ├── brute_force_write.ipynb
+│   ├── common.ipynb
+│   ├── loading_payloads.ipynb
+│   ├── random_checks.ipynb
+│   ├── recon.ipynb
+│   └── wrapper.py
+├── kitsune-based/
+│   ├── 1.extract_csvs.ipynb
+│   ├── 2.feature_extraction.ipynb
+│   ├── extract_parser.sh
+│   ├── extract.py
+│   ├── kitnet_modbus_baseline.py
+│   ├── kitsune_new.py
+│   ├── labeling.py
+│   ├── modbus_parser.py
+│   ├── run_kitnet.sh
+│   ├── split_20_80.ipynb
+│   ├── windowing.py
+│   └── obs/
+└── lstm-based/
+   ├── 1.extract_csvs.ipynb
+   ├── 2.feature_extraction.ipynb
+   ├── 3.labeling.py
+   ├── 4a.weighted_lstm.py
+   ├── 4b.autoenc_mse.py
+   ├── 4c.lstm_autoencoder.py
+   ├── 4d.baseline_lstm.py
+   ├── autoenc_for_weights.py
+   ├── rforest.py
+   ├── xgb.py
+   ├── xgboost_classifier.py
+   └── obs/
 ```
+
+Ignored/local-only paths in the current checkout include `data/`, `KitNET-py/`, `.venv/`, `csvs/`, `train/`, `observations/`, `analysis/obs/`, `analysis/random/`, `kitsune-based/observations/`, `extra/`, and the scratch command/log files listed in `.gitignore`. **You will need to create the `data/`, `train/`, and `observations/` directories and populate them before running most scripts**—see the [Setup](#setup--installation) section.
 
 ---
 
@@ -134,17 +126,14 @@ ugrc/
    pip install -r requirements.txt
    ```
 
-   Key dependencies:
-   - `scapy==2.7.0`: Packet manipulation and analysis
-   - `pandas`: Data manipulation
-   - `numpy`: Numerical computing
-   - `scikit-learn`: Machine learning utilities
-   - `torch/tensorflow`: Deep learning frameworks
-   - `xgboost`: Gradient boosting
-   - `matplotlib/seaborn`: Visualization
-   - `jupyter`: Interactive notebooks
-
-4. **Ensure tools are available** (for PCAP processing)
+4. **Create working directories** (not in Git, will hold data and results)
+   ```bash
+   mkdir -p data/benign data/attack data/combined
+   mkdir -p train
+   mkdir -p observations
+   ```
+   
+5. **Ensure tools are available** (for PCAP processing)
    ```bash
    # Linux/Mac
    brew install wireshark  # includes tshark & mergecap
@@ -164,6 +153,8 @@ Converts raw network captures into structured feature data.
 - [`analysis/1.extract_csvs.ipynb`](analysis/1.extract_csvs.ipynb): Extract Modbus fields from PCAP
 - [`kitsune-based/extract.py`](kitsune-based/extract.py): Extract for KitNET format
 
+**Inputs:** Raw `.pcap` or `.pcapng` files (place in `data/benign/`, `data/attack/`, etc.)
+
 **Process:**
 ```
 Raw PCAP files → Merge captures → tshark extraction → CSV with fields:
@@ -172,7 +163,7 @@ Raw PCAP files → Merge captures → tshark extraction → CSV with fields:
   - Values: register values, word counts
 ```
 
-**Output:** CSV files in `train/` directory (e.g., `1s_benign_flows.csv`)
+**Output:** CSV files written to `train/` directory (e.g., `1s_benign_flows.csv`, `1s_cscada_flows.csv`)
 
 ---
 
@@ -197,21 +188,25 @@ Aggregate packet-level data into time windows and extract statistical features.
 ```
 
 **Granularity Options:**
-- **100ms windows**: Finer temporal resolution, more data points
+- **100ms windows**: Finer temporal resolution, more data points. Never used in the code.
 - **1s windows**: Coarser resolution, fewer samples
 
-**Output:** Windowed CSV files (e.g., `labeled_1s_cscada.csv`)
+**Inputs:** CSV files from Stage 1 (located in `train/`)
+
+**Output:** Windowed and aggregated CSV files written to `train/` (e.g., `labeled_1s_cscada.csv`, `labeled_1s_external.csv`)
 
 ---
 
 ### Stage 3: Label Data with Attack Ground Truth
 Align feature windows with attack logs to create labeled datasets.
 
+**Inputs:** Attack metadata CSV files (must be placed in `data/attack/` or similar); windowed CSV files from Stage 2 (in `train/`)
+
 **Scripts:**
 - [`lstm-based/3.labeling.py`](lstm-based/3.labeling.py): Label windows with attack metadata
-- Uses attack CSV logs: `TargetIP`, `Attack`, `TransactionID`, `Timestamp`
+- Expects attack CSV logs with columns: `TargetIP`, `Attack`, `TransactionID`, `Timestamp`
 
-**Output:** Labeled CSV with columns: `[features..., label, time_window]`
+**Output:** Labeled CSV files written to `train/` with columns: `[features..., label, time_window]`
 - `label=0`: Benign traffic
 - `label=1`: Attack traffic
 
@@ -245,7 +240,9 @@ chmod +x run_kitnet.sh
 - `--threshold-quantile`: Anomaly threshold percentile (default: 0.95)
 - `--force-retrain`: Retrain even if model exists
 
-**Output:** Models saved to `obs/` with evaluation metrics (ROC-AUC, precision, recall)
+**Inputs:** Requires labeled CSV files from Stage 3 (located in `train/`)
+
+**Output:** Models saved to `kitsune-based/obs/` and evaluation metrics (ROC-AUC, precision, recall)
 
 ---
 
@@ -258,39 +255,50 @@ chmod +x run_kitnet.sh
    cd lstm-based
    python 4d.baseline_lstm.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Trains on labeled benign/attack data
-   - Outputs classification metrics
+   - Outputs classification metrics to `obs/baseline_lstm/`
 
 2. **Weighted LSTM** (supervised with class weighting)
    ```bash
    python 4a.weighted_lstm.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Addresses class imbalance in attack data
+   - Outputs results to `obs/weighted_lstm/`
 
 3. **LSTM Autoencoder** (unsupervised)
    ```bash
    python 4c.lstm_autoencoder.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Trains on benign sequences, detects anomalies by reconstruction error
    - Requires manual threshold tuning
+   - Outputs results to `obs/lstm_autoencoder/`
 
 4. **Autoencoder with MSE** (unsupervised)
    ```bash
    python 4b.autoenc_mse.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Simpler autoencoder variant
+   - Outputs results to `obs/autoencoder_mse/`
 
 5. **XGBoost Classifier** (supervised)
    ```bash
    python xgb.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Tree-based classification
+   - Outputs results to `obs/xgboost/`
 
 6. **Random Forest Classifier** (supervised)
    ```bash
    python rforest.py
    ```
+   - **Requires:** Labeled CSV files in `../train/` (from Stage 3)
    - Ensemble of decision trees
+   - Outputs results to `obs/rforest/`
 
 ---
 

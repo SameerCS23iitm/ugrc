@@ -1,1 +1,11 @@
-scapy==2.7.0
+dpkt
+joblib
+matplotlib
+numpy
+pandas
+scikit-learn
+scipy
+seaborn
+tensorflow
+torch
+xgboost

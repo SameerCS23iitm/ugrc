@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project implements **machine learning-based anomaly detection** for substation networks using the **CIC Modbus Dataset 2023**(https://www.unb.ca/cic/datasets/modbus-2023.html). The goal is to detect intrusion attempts and anomalies in Industrial Control System (ICS) network traffic using the Modbus protocol.
+This project implements **machine learning-based anomaly detection** for substation networks using the [**CIC Modbus Dataset 2023**](https://www.unb.ca/cic/datasets/modbus-2023.html). The goal is to detect intrusion attempts and anomalies in Industrial Control System (ICS) network traffic using the Modbus protocol.
 
 ### Key Objectives
 - Extract features from raw PCAP network captures and create labeled datasets
